@@ -88,10 +88,23 @@ def getItems(department):
             raise RuntimeError('Error: Unknown Availability: ' + buyMessage)
 
         images = []
-        for imageHolder in browser.find_elements_by_class_name('als-item'):
+        for imageHolder in browser.find_element_by_class_name('als-wrapper').find_elements_by_class_name('als-item'):
             imageUrl = imageHolder.find_element_by_tag_name('img').get_attribute('src')
             images.append(imageUrl)
         item['images'] = images
+
+        # dimensions, department, sentences
+
+        description = browser.find_element_by_class_name('description')
+        dimensions = description.get_attribute('innerHTML')
+        dimensions = dimensions[dimensions.index('<br>'):]
+        position = dimensions.find('l. ')
+        item['length'] = dimensions[position+3:dimensions.index('&nbsp;', position+3)]
+        position = dimensions.find('w. ')
+        item['width'] = dimensions[position+3:dimensions.index('&nbsp;', position+3)]
+        position = dimensions.find('h. ')
+        item['height'] = dimensions[position+3:dimensions.index('&nbsp;', position+3)]
+        print item['length']
 
         print item
         items.append(item)
