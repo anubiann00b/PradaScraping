@@ -123,11 +123,11 @@ def getItems(department):
 
         buyMessage = browser.find_element_by_class_name('addToCartButton').get_attribute('innerHTML')
         if buyMessage == '_add to shopping bag':
-            item['available'] = 'Available'
+            item['available'] = True
         elif buyMessage == '_sold out':
-            item['available'] = 'Sold Out'
+            item['available'] = True
         elif buyMessage == '_available soon':
-            item['available'] = 'Coming Soon'
+            item['available'] = False
         else:
             item['available'] = 'Unknown'
             raise RuntimeError('Error: Unknown Availability: ' + buyMessage + '\n' + department['url'])
