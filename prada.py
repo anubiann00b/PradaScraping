@@ -44,7 +44,10 @@ def getDepartmentsFromCollection(url, gender, element):
     for departmentBullet in departmentList.find_elements_by_tag_name('li'):
         departmentElement = departmentBullet.find_element_by_tag_name('a')
         # "<span class="selector">_</span>" is in the innerHTML before the name
-        collectionDepartments.append({'name':departmentElement.get_attribute("innerHTML")[31:].title(),
+        departmentName = departmentElement.get_attribute("innerHTML")[31:].title()
+        if departmentName == "Fragrances":
+            continue
+        collectionDepartments.append({'name':departmentName,
                                       'url':departmentElement.get_attribute('href'),
                                       'gender':gender})
     return collectionDepartments
@@ -59,14 +62,13 @@ def getDepartments():
                         'gender':'none'})
     departments += getDepartmentsFromCollection('http://www.prada.com/en/US/e-store/collection/woman.html', 'female', 'enUSe-storecollectionwoman-top-menu')
     departments += getDepartmentsFromCollection('http://www.prada.com/en/US/e-store/collection/man.html', 'male', 'enUSe-storecollectionman-top-menu')
-    departments.reverse()
     return departments
 
 departments = getDepartments()
 
 
 def getItems(department):
-    items = []
+    items = {}
     browser.get(department['url'])
 
     while True:  # sometimes the element doesn't load
@@ -87,9 +89,33 @@ def getItems(department):
             except NoSuchElementException:
                 time.sleep(0.1)
                 continue
-        if len(items) != 0 and item['id'] == items[0]['id']:
+            if len(items) == 0:
+                firstItemId = item['id']
+        if len(items) != 0 and item['id'] == firstItemId:
             print department['name'] + ' done! ' + str(len(items)) + " items."
             break
+        duplicate = False
+        for alternateColorDiv in browser.find_element_by_class_name('container').find_element_by_class_name('colors').find_elements_by_tag_name('div'):
+            alternateColorId = alternateColorDiv.get_attribute('id')[5:] # colorBN2899_2E14_F0J4L
+            if alternateColorId in items:
+                duplicate = True
+                existingItem = items[alternateColorId]
+
+                images = []
+                for imageHolder in browser.find_element_by_class_name('als-wrapper').find_elements_by_class_name('als-item'):
+                    imageUrl = imageHolder.find_element_by_tag_name('img').get_attribute('src')
+                    images.append(imageUrl)
+                try:
+                    colorName = browser.find_element_by_class_name('color').find_element_by_tag_name('span').get_attribute('innerHTML')
+                    existingItem['colors'].append({'name':colorName,
+                                           'color_family':'',
+                                           'images':images})
+                    print 'Added color ' + colorName + ' to item ' + existingItem['id']
+                except NoSuchElementException:
+                    pass
+        if duplicate:
+            openPage(browser.find_element_by_id('nextButton'))
+            continue
 
         item['url'] = department['url']
         item['gender'] = department['gender']
@@ -114,7 +140,6 @@ def getItems(department):
             item['sizes'] = availableSizes
             item['unavailable'] = unavailableSizes
 
-
         item['category'] = browser.find_element_by_class_name('nameProduct').text
 
         while item.get('price', '') == '':
@@ -136,47 +161,55 @@ def getItems(department):
         for imageHolder in browser.find_element_by_class_name('als-wrapper').find_elements_by_class_name('als-item'):
             imageUrl = imageHolder.find_element_by_tag_name('img').get_attribute('src')
             images.append(imageUrl)
-        item['images'] = images
 
-        # dimensions, department, sentences
+        item['colors'] = []
+        try:
+            item['colors'].append({'name':browser.find_element_by_class_name('color').find_element_by_tag_name('span').get_attribute('innerHTML'),
+                                   'color_family':'',
+                                   'images':images})
+        except NoSuchElementException:
+            pass
 
         description = browser.find_element_by_class_name('description')
         dimensions = description.get_attribute('innerHTML')
+        length = ''
+        width = ''
+        height = ''
         if '<br>' in dimensions:
             dimensions = dimensions[dimensions.index('<br>'):]
             position = dimensions.find('l. ')
             try:
-                item['length'] = dimensions[position+3:dimensions.index('&nbsp;', position+3)]
-            except ValueError:
-                item['length'] = '-1'
+                length = dimensions[position+3:dimensions.index('&nbsp;', position+3)]
+            except: pass
 
             position = dimensions.find('w. ')
             try:
-                item['width'] = dimensions[position+3:dimensions.index('&nbsp;', position+3)]
-            except ValueError:
-                item['width'] = '-1'
+                width = dimensions[position+3:dimensions.index('&nbsp;', position+3)]
+            except: pass
             position = dimensions.find('h. ')
             try:
-                item['height'] = dimensions[position+3:dimensions.index('&nbsp;', position+3)]
-            except ValueError:
-                item['height'] = '-1'
+                height = dimensions[position+3:dimensions.index('&nbsp;', position+3)]
+            except: pass
 
-            if not isNumber(item['length']):
-                item['length'] = -1
-            if not isNumber(item['width']):
-                item['width'] = -1
-            if not isNumber(item['height']):
-                item['height'] = -1
+            if not isNumber(length):
+                length = ''
+            if not isNumber(width):
+                width = ''
+            if not isNumber(height):
+                height = ''
+        item['size'] = length + 'x' + width + 'x' + height
 
-        item['description'] = description.find_element_by_tag_name('p').get_attribute('innerHTML').split('<br><br>')
-
+        descriptionString = description.find_element_by_tag_name('p').get_attribute('innerHTML').replace('<br><br>', '\n')
         try:
-            item['colors'] = browser.find_element_by_class_name('color').find_element_by_tag_name('span').get_attribute('innerHTML').split('+')
-        except NoSuchElementException:
-            pass
+            firstItemIndex = descriptionString.index('\n')
+            item['name'] = descriptionString[:firstItemIndex]
+            item['description'] = descriptionString[firstItemIndex+1:]
+        except ValueError:
+            item['name'] = descriptionString
+            item['description'] = ''
 
         print item
-        items.append(item)
+        items[item['id']] = item
         openPage(browser.find_element_by_id('nextButton'))
 
 for department in departments:
