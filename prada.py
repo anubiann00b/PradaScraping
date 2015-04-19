@@ -1,19 +1,26 @@
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException, WebDriverException
 import time
 
 chromedriver = "./chromedriver"
 browser = webdriver.Chrome(executable_path = chromedriver)
 
+def isNumber(s):
+    try:
+        float(s)
+        return True
+    except ValueError:
+        return False
+
 def waitFor(condition_function):
     start_time = time.time()
-    while time.time() < start_time + 3:
+    while time.time() < start_time + 20:
         if condition_function():
             return True
         else:
             time.sleep(0.1)
     raise Exception(
-        'Timeout waiting for {}'.format(condition_function.__name__)
+        'Timeout waiting for ' + condition_function.__name__
     )
 
 def openPage(link):
@@ -63,18 +70,27 @@ def getItems(department):
         except NoSuchElementException:
             time.sleep(0.1)
             continue
+        except WebDriverException:
+            time.sleep(0.1)
+            continue
         break
     while True:
         item = {}
-        item['id'] = browser.find_element_by_class_name('product').find_element_by_class_name('title').find_element_by_tag_name('h1').text
+        while item.get('id', '') == '':
+            try:
+                item['id'] = browser.find_element_by_class_name('product').find_element_by_class_name('title').find_element_by_tag_name('h1').text
+            except NoSuchElementException:
+                time.sleep(0.1)
+                continue
         if len(items) != 0 and item['id'] == items[0]['id']:
             print department['name'] + ' done! ' + str(len(items)) + " items."
             break
 
         item['type'] = browser.find_element_by_class_name('nameProduct').text
 
-        while 'price' not in item or item['price'] == '':
-            item['price'] = browser.find_element_by_id('price_target').text  # TODO: format price ("$ 2,415")
+        while item.get('price', '') == '':
+            item['price'] = browser.find_element_by_id('price_target').text
+            for char in '$ ,': item['price'] = item['price'].replace(char, '');
 
         buyMessage = browser.find_element_by_class_name('addToCartButton').get_attribute('innerHTML')
         if buyMessage == '_add to shopping bag':
@@ -97,14 +113,38 @@ def getItems(department):
 
         description = browser.find_element_by_class_name('description')
         dimensions = description.get_attribute('innerHTML')
-        dimensions = dimensions[dimensions.index('<br>'):]
-        position = dimensions.find('l. ')
-        item['length'] = dimensions[position+3:dimensions.index('&nbsp;', position+3)]
-        position = dimensions.find('w. ')
-        item['width'] = dimensions[position+3:dimensions.index('&nbsp;', position+3)]
-        position = dimensions.find('h. ')
-        item['height'] = dimensions[position+3:dimensions.index('&nbsp;', position+3)]
-        print item['length']
+        if '<br>' in dimensions:
+            dimensions = dimensions[dimensions.index('<br>'):]
+            position = dimensions.find('l. ')
+            try:
+                item['length'] = dimensions[position+3:dimensions.index('&nbsp;', position+3)]
+            except ValueError:
+                item['length'] = '-1'
+
+            position = dimensions.find('w. ')
+            try:
+                item['width'] = dimensions[position+3:dimensions.index('&nbsp;', position+3)]
+            except ValueError:
+                item['width'] = '-1'
+            position = dimensions.find('h. ')
+            try:
+                item['height'] = dimensions[position+3:dimensions.index('&nbsp;', position+3)]
+            except ValueError:
+                item['height'] = '-1'
+
+            if not isNumber(item['length']):
+                item['length'] = -1
+            if not isNumber(item['width']):
+                item['width'] = -1
+            if not isNumber(item['height']):
+                item['height'] = -1
+
+        item['description'] = description.find_element_by_tag_name('p').get_attribute('innerHTML').split('<br><br>')
+
+        try:
+            item['colors'] = browser.find_element_by_class_name('color').find_element_by_tag_name('span').get_attribute('innerHTML').split('+')
+        except NoSuchElementException:
+            pass
 
         print item
         items.append(item)
@@ -112,6 +152,5 @@ def getItems(department):
 
 for department in departments:
     getItems(department)
-print departments
 
 browser.close()
