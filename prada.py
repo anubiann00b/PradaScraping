@@ -4,6 +4,7 @@ import time
 
 chromedriver = "./chromedriver"
 browser = webdriver.Chrome(executable_path = chromedriver)
+materials = ['silk', 'cotton', 'chiffon', 'satin', 'silt', 'wool', 'linen', 'cashmere', 'taffita', 'leather', 'mink', 'fur', 'suade', 'tweed', 'fleece', 'velvet', 'grogaine', 'corduroy', 'denim']
 
 def isNumber(s):
     try:
@@ -36,6 +37,18 @@ def openPage(link):
 
     waitFor(isStale)
 
+def getDepartmentsFromCollection(url, gender, element):
+    browser.get(url)
+    departmentList = browser.find_element_by_id(element)
+    collectionDepartments = []
+    for departmentBullet in departmentList.find_elements_by_tag_name('li'):
+        departmentElement = departmentBullet.find_element_by_tag_name('a')
+        # "<span class="selector">_</span>" is in the innerHTML before the name
+        collectionDepartments.append({'name':departmentElement.get_attribute("innerHTML")[31:].title(),
+                                      'url':departmentElement.get_attribute('href'),
+                                      'gender':gender})
+    return collectionDepartments
+
 def getDepartments():
     departments = []
     departments.append({'name':'Fashion Show',
@@ -44,17 +57,9 @@ def getDepartments():
     departments.append({'name':'Travel',
                         'url':'http://www.prada.com/en/US/e-store/department/travel.html',
                         'gender':'none'})
-
-    url = 'http://www.prada.com/en/US/e-store/collection/woman.html'
-    gender = 'female'
-    browser.get(url)
-    departmentList = browser.find_element_by_id('enUSe-storecollectionwoman-top-menu')
-    for departmentBullet in departmentList.find_elements_by_tag_name('li'):
-        departmentElement = departmentBullet.find_element_by_tag_name('a')
-        # "<span class="selector">_</span>" is in the innerHTML before the name
-        departments.append({'name':departmentElement.get_attribute("innerHTML")[31:],
-                            'url':departmentElement.get_attribute('href'),
-                            'gender':gender})
+    departments += getDepartmentsFromCollection('http://www.prada.com/en/US/e-store/collection/woman.html', 'female', 'enUSe-storecollectionwoman-top-menu')
+    departments += getDepartmentsFromCollection('http://www.prada.com/en/US/e-store/collection/man.html', 'male', 'enUSe-storecollectionman-top-menu')
+    departments.reverse()
     return departments
 
 departments = getDepartments()
@@ -86,7 +91,31 @@ def getItems(department):
             print department['name'] + ' done! ' + str(len(items)) + " items."
             break
 
-        item['type'] = browser.find_element_by_class_name('nameProduct').text
+        item['url'] = department['url']
+        item['gender'] = department['gender']
+        item['currency'] = 'USD'
+        item['brand'] = 'Prada'
+
+        availableSizes = []
+        unavailableSizes = []
+        if department['name'] == 'Footwear':
+            sizeElements = []
+            while len(sizeElements) == 0:
+                sizeElements = browser.find_element_by_class_name('size_list').find_elements_by_tag_name('li')
+            for sizeElement in sizeElements:
+                size = sizeElement.find_element_by_tag_name('div').get_attribute('innerHTML')
+                availability = sizeElement.get_attribute('class')
+                if availability == 'available':
+                    availableSizes.append(size)
+                elif availability == 'unavailable':
+                    unavailableSizes.append(size)
+                else:
+                    raise RuntimeError('Error: Unknown Size Availability: ' + availability + '\n' + department['url'])
+            item['sizes'] = availableSizes
+            item['unavailable'] = unavailableSizes
+
+
+        item['category'] = browser.find_element_by_class_name('nameProduct').text
 
         while item.get('price', '') == '':
             item['price'] = browser.find_element_by_id('price_target').text
@@ -101,7 +130,7 @@ def getItems(department):
             item['available'] = 'Coming Soon'
         else:
             item['available'] = 'Unknown'
-            raise RuntimeError('Error: Unknown Availability: ' + buyMessage)
+            raise RuntimeError('Error: Unknown Availability: ' + buyMessage + '\n' + department['url'])
 
         images = []
         for imageHolder in browser.find_element_by_class_name('als-wrapper').find_elements_by_class_name('als-item'):
