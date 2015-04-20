@@ -20,9 +20,7 @@ def waitFor(condition_function):
             return True
         else:
             time.sleep(0.1)
-    raise Exception(
-        'Timeout waiting for ' + condition_function.__name__
-    )
+    raise Exception('Timeout waiting for ' + condition_function.__name__)
 
 def openPage(link):
     link.click()
@@ -93,7 +91,7 @@ def getItems(department):
                 firstItemId = item['id']
         if len(items) != 0 and item['id'] == firstItemId:
             print department['name'] + ' done! ' + str(len(items)) + " items."
-            break
+            return items
         duplicate = False
         for alternateColorDiv in browser.find_element_by_class_name('container').find_element_by_class_name('colors').find_elements_by_tag_name('div'):
             alternateColorId = alternateColorDiv.get_attribute('id')[5:] # colorBN2899_2E14_F0J4L
@@ -212,7 +210,9 @@ def getItems(department):
         items[item['id']] = item
         openPage(browser.find_element_by_id('nextButton'))
 
+allItems = {}
 for department in departments:
-    getItems(department)
+    allItems.update(getItems(department))
 
-browser.close()
+print '\n\n'
+print allItems
