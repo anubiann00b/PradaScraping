@@ -84,15 +84,16 @@ def getItems(department):
         break
     while True:
         item = {}
-        while item.get('id', '') == '':
+        currentItemId = ''
+        while currentItemId == '':
             try:
-                item['id'] = browser.find_element_by_class_name('product').find_element_by_class_name('title').find_element_by_tag_name('h1').text
-            except NoSuchElementException:
+                currentItemId = browser.find_element_by_class_name('product').find_element_by_class_name('title').find_element_by_tag_name('h1').text
+            except NoSuchElementException as e:
                 time.sleep(0.1)
                 continue
             if len(items) == 0:
-                firstItemId = item['id']
-        if len(items) != 0 and item['id'] == firstItemId:
+                firstItemId = currentItemId
+        if len(items) != 0 and currentItemId == firstItemId:
             print department['name'] + ' done! ' + str(len(items)) + " items."
             return items
         duplicate = False
@@ -115,7 +116,7 @@ def getItems(department):
                     existingItem['colors'].append({'name':colorName,
                                            'color_family':'',
                                            'images':images})
-                    print 'Added color ' + colorName + ' to item ' + existingItem['id']
+                    print 'Added ' + colorName + ' to ' + existingItem['name']
                     print existingItem
                 except NoSuchElementException:
                     pass
@@ -127,6 +128,7 @@ def getItems(department):
         item['gender'] = department['gender']
         item['currency'] = 'USD'
         item['brand'] = 'prada'
+        item['store'] = 'prada'
 
         availableSizes = []
         unavailableSizes = []
@@ -217,14 +219,14 @@ def getItems(department):
         descriptionString = description.find_element_by_tag_name('p').get_attribute('innerHTML').replace('<br><br>', '\n')
         try:
             firstItemIndex = descriptionString.index('\n')
-            item['name'] = descriptionString[:firstItemIndex]
+            item['name'] = descriptionString[:firstItemIndex].title()
             item['description'] = descriptionString[firstItemIndex+1:]
         except ValueError:
             item['name'] = descriptionString
             item['description'] = ''
 
         print item
-        items[item['id']] = item
+        items[currentItemId] = item
         openPage(browser.find_element_by_id('nextButton'))
 
 allItems = {}
