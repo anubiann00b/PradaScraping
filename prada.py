@@ -6,6 +6,16 @@ chromedriver = "./chromedriver"
 browser = webdriver.Chrome(executable_path = chromedriver)
 materials = ['silk', 'cotton', 'chiffon', 'satin', 'silt', 'wool', 'linen', 'cashmere', 'taffita', 'leather', 'mink', 'fur', 'suade', 'tweed', 'fleece', 'velvet', 'grogaine', 'corduroy', 'denim']
 
+friendlyName = {'backpack': 'Backpack', 'trolley': 'Suitcase', 'pouch': 'Pouch', 'tote': 'Tote', 'clutch': 'Clutch',
+                'wallet': 'Wallet', 'keyholder': 'Keyholder', 'trick': 'Trick', 'foulard': 'Foulard',
+                'necklace': 'Necklace', 'earrings': 'Earrings', 'bracelet': 'Bracelet', 'clog': 'Clog', 'pump': 'Pump',
+                'sandal': 'Sandal', 'loafer': 'Loafer', 'espadrilla': '', 'thong': 'flip flop', 'ballerina': 'flat', 'driver': 'moccasin', 'sneaker': '',
+                'eyewear': '', 'top handle': 'purse', 'shoulder bag': 'purse', 'messenger bag': '', 'laptop case': '',
+                'shoe care': '', 'lock case': '', 'travel kit': '', 'passport cover': '', 'flap bag': '',
+                'small bag': '', 'credit card': '', 'card holder': '', 'business card': '', 'coin purse': '',
+                'cosmetic pouch': '', 'shoe care kit': '', 'credit card holder': '', 'business card holder': ''}
+
+
 def isNumber(s):
     try:
         float(s)
@@ -54,10 +64,10 @@ def getDepartments():
     departments = []
     departments.append({'name':'Fashion Show',
                         'url':'http://www.prada.com/en/US/e-store/department/fashion-show.html',
-                        'gender':'none'})
+                        'gender':'female'})
     departments.append({'name':'Travel',
                         'url':'http://www.prada.com/en/US/e-store/department/travel.html',
-                        'gender':'none'})
+                        'gender':'male'})
     departments += getDepartmentsFromCollection('http://www.prada.com/en/US/e-store/collection/woman.html', 'female', 'enUSe-storecollectionwoman-top-menu')
     departments += getDepartmentsFromCollection('http://www.prada.com/en/US/e-store/collection/man.html', 'male', 'enUSe-storecollectionman-top-menu')
     return departments
@@ -109,16 +119,17 @@ def getItems(department):
                                            'color_family':'',
                                            'images':images})
                     print 'Added color ' + colorName + ' to item ' + existingItem['id']
+                    print existingItem
                 except NoSuchElementException:
                     pass
         if duplicate:
             openPage(browser.find_element_by_id('nextButton'))
             continue
 
-        item['url'] = department['url']
+        item['url'] = browser.current_url
         item['gender'] = department['gender']
         item['currency'] = 'USD'
-        item['brand'] = 'Prada'
+        item['brand'] = 'prada'
 
         availableSizes = []
         unavailableSizes = []
@@ -138,7 +149,7 @@ def getItems(department):
             item['sizes'] = availableSizes
             item['unavailable'] = unavailableSizes
 
-        item['category'] = browser.find_element_by_class_name('nameProduct').text
+        item['category'] = friendlyName[browser.find_element_by_class_name('nameProduct').text]
 
         while item.get('price', '') == '':
             item['price'] = browser.find_element_by_id('price_target').text
