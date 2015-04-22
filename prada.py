@@ -6,15 +6,8 @@ chromedriver = "./chromedriver"
 browser = webdriver.Chrome(executable_path = chromedriver)
 materials = ['silk', 'cotton', 'chiffon', 'satin', 'silt', 'wool', 'linen', 'cashmere', 'taffita', 'leather', 'mink', 'fur', 'suade', 'tweed', 'fleece', 'velvet', 'grogaine', 'corduroy', 'denim']
 
-friendlyName = {'backpack': 'Backpack', 'trolley': 'Suitcase', 'pouch': 'Pouch', 'tote': 'Tote', 'clutch': 'Clutch',
-                'wallet': 'Wallet', 'keyholder': 'Keyholder', 'trick': 'Trick', 'foulard': 'Foulard',
-                'necklace': 'Necklace', 'earrings': 'Earrings', 'bracelet': 'Bracelet', 'clog': 'Clog', 'pump': 'Pump',
-                'sandal': 'Sandal', 'loafer': 'Loafer', 'espadrilla': '', 'thong': 'flip flop', 'ballerina': 'flat', 'driver': 'moccasin', 'sneaker': '',
-                'eyewear': '', 'top handle': 'purse', 'shoulder bag': 'purse', 'messenger bag': '', 'laptop case': '',
-                'shoe care': '', 'lock case': '', 'travel kit': '', 'passport cover': '', 'flap bag': '',
-                'small bag': '', 'credit card': '', 'card holder': '', 'business card': '', 'coin purse': '',
-                'cosmetic pouch': '', 'shoe care kit': '', 'credit card holder': '', 'business card holder': ''}
-
+friendlyName = { 'backpack': 'backpack', 'trolley': 'suitcase', 'thong': 'flip flop', 'ballerina': 'flat',
+                'driver': 'moccasin', 'top handle': 'handbag', 'shoulder bag': 'purse' }
 
 def isNumber(s):
     try:
@@ -64,12 +57,12 @@ def getDepartments():
     departments = []
     departments.append({'name':'Fashion Show',
                         'url':'http://www.prada.com/en/US/e-store/department/fashion-show.html',
-                        'gender':'female'})
+                        'gender':'women'})
     departments.append({'name':'Travel',
                         'url':'http://www.prada.com/en/US/e-store/department/travel.html',
-                        'gender':'male'})
-    departments += getDepartmentsFromCollection('http://www.prada.com/en/US/e-store/collection/woman.html', 'female', 'enUSe-storecollectionwoman-top-menu')
-    departments += getDepartmentsFromCollection('http://www.prada.com/en/US/e-store/collection/man.html', 'male', 'enUSe-storecollectionman-top-menu')
+                        'gender':'men'})
+    departments += getDepartmentsFromCollection('http://www.prada.com/en/US/e-store/collection/woman.html', 'women', 'enUSe-storecollectionwoman-top-menu')
+    departments += getDepartmentsFromCollection('http://www.prada.com/en/US/e-store/collection/man.html', 'men', 'enUSe-storecollectionman-top-menu')
     return departments
 
 departments = getDepartments()
@@ -81,7 +74,7 @@ def getItems(department):
 
     while True:  # sometimes the element doesn't load
         try:
-            openPage(browser.find_element_by_class_name('nextItem')) # first item
+            openPage(browser.find_element_by_class_name('nextItem'))  # first item
         except NoSuchElementException:
             time.sleep(0.1)
             continue
@@ -104,7 +97,10 @@ def getItems(department):
             return items
         duplicate = False
         for alternateColorDiv in browser.find_element_by_class_name('container').find_element_by_class_name('colors').find_elements_by_tag_name('div'):
-            alternateColorId = alternateColorDiv.get_attribute('id')[5:] # colorBN2899_2E14_F0J4L
+            try:
+                alternateColorId = alternateColorDiv.get_attribute('id')[5:]  # colorBN2899_2E14_F0J4L
+            except StaleElementReferenceException:  # Sometimes a false alternate loads and then disappears
+                continue
             if alternateColorId in items:
                 duplicate = True
                 existingItem = items[alternateColorId]
@@ -115,6 +111,7 @@ def getItems(department):
                     images.append(imageUrl)
                 try:
                     colorName = browser.find_element_by_class_name('color').find_element_by_tag_name('span').get_attribute('innerHTML')
+                    existingItem['images'] += images  # HERE
                     existingItem['colors'].append({'name':colorName,
                                            'color_family':'',
                                            'images':images})
@@ -149,11 +146,18 @@ def getItems(department):
             item['sizes'] = availableSizes
             item['unavailable'] = unavailableSizes
 
-        item['category'] = friendlyName[browser.find_element_by_class_name('nameProduct').text]
+        item['category'] = friendlyName.get(browser.find_element_by_class_name('nameProduct').text,
+                                            browser.find_element_by_class_name('nameProduct').text)
 
-        while item.get('price', '') == '':
-            item['price'] = browser.find_element_by_id('price_target').text
-            for char in '$ ,': item['price'] = item['price'].replace(char, '');
+        itemPrice = ''
+        while itemPrice == '':  # Price is loaded dynamically -_-
+            # Default formatting: "$ 2,915"
+            itemPrice = browser.find_element_by_id('price_target').text
+            for char in '$ ,': itemPrice = itemPrice.replace(char, '')
+            if itemPrice != '':
+                item['price'] = float(itemPrice)
+            else:
+                time.sleep(0.05)
 
         buyMessage = browser.find_element_by_class_name('addToCartButton').get_attribute('innerHTML')
         if buyMessage == '_add to shopping bag':
@@ -170,6 +174,8 @@ def getItems(department):
         for imageHolder in browser.find_element_by_class_name('als-wrapper').find_elements_by_class_name('als-item'):
             imageUrl = imageHolder.find_element_by_tag_name('img').get_attribute('src')
             images.append(imageUrl)
+
+        item['images'] = list(images)
 
         item['colors'] = []
         try:
