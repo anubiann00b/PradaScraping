@@ -19,7 +19,7 @@ def isNumber(s):
 # Waits for a function to return true. Used for dynamic loading.
 def waitFor(condition_function):
     start_time = time.time()
-    while time.time() < start_time + 20:
+    while time.time() < start_time + 5:
         if condition_function():
             return True
         else:
@@ -93,7 +93,11 @@ def getShoeSizes():
 def getPrice():
     while True:  # Price is loaded dynamically -_-
         # Default formatting: "$ 2,915"
-        itemPrice = browser.find_element_by_id('price_target').text
+        try:
+            itemPrice = browser.find_element_by_id('price_target').text
+        except StaleElementReferenceException:
+            time.sleep(0.05)
+            continue
         for char in '$ ,': itemPrice = itemPrice.replace(char, '')
         if itemPrice == '':
             time.sleep(0.05)
@@ -113,14 +117,18 @@ def getAvailability():
         return False
 
 def getImages():
-    images = []
-    for imageHolder in browser.find_element_by_class_name('als-wrapper').find_elements_by_class_name('als-item'):
-        imageUrl = imageHolder.find_element_by_tag_name('img').get_attribute('src')
-        images.append(imageUrl)
-    return images
+    while True:
+        try:
+            images = []
+            for imageHolder in browser.find_element_by_class_name('als-wrapper').find_elements_by_class_name('als-item'):
+                imageUrl = imageHolder.find_element_by_tag_name('img').get_attribute('src')
+                images.append(imageUrl)
+            return images
+        except StaleElementReferenceException or NoSuchElementException:
+            time.sleep(0.05)
 
 # Gets description, name, and size
-def getDescription:
+def getDescription():
     item = {}
     description = browser.find_element_by_class_name('description')
     dimensions = description.get_attribute('innerHTML')
@@ -162,6 +170,7 @@ def getDescription:
     return item
 
 def getItems(department):
+    visitedIds = []
     items = {}
     browser.get(department['url'])
 
@@ -190,38 +199,24 @@ def getItems(department):
                 continue
             if len(items) == 0:
                 firstItemId = currentItemId
-
         # Check if we're done with the department
         if len(items) != 0 and currentItemId == firstItemId:
             print department['name'] + ' done! ' + str(len(items)) + " items."
+            for item in items:
+                print items[item]
             return items
 
-        # If we already indexed an item which this item is a duplicate of, then this is the same product in a different color.
-        duplicate = False
-        for alternateColorDiv in browser.find_element_by_class_name('container').find_element_by_class_name('colors').find_elements_by_tag_name('div'):
-            try:
-                alternateColorId = alternateColorDiv.get_attribute('id')[5:]  # colorBN2899_2E14_F0J4L
-            except StaleElementReferenceException:  # Sometimes a false alternate loads and then disappears, site bug
-                continue
-            if alternateColorId in items:
-                duplicate = True
-                existingItem = items[alternateColorId]
-
-                images = getImages()
+        # If this was a duplicate item, just go to the next one. We already added it as a duplicate color.
+        if currentItemId in items or currentItemId in visitedIds:
+            while True:
                 try:
-                    colorName = browser.find_element_by_class_name('color').find_element_by_tag_name('span').get_attribute('innerHTML')
-                    existingItem['images'] += images
-                    existingItem['colors'].append({'name':colorName,
-                                           'color_family':'',
-                                           'images':images})
-                    print 'Added ' + colorName + ' to ' + existingItem['name']
-                    print existingItem
-                except NoSuchElementException:
-                    pass
-        # If this was a duplicate item, just go to the next one. We already added the color.
-        if duplicate:
-            openPage(browser.find_element_by_id('nextButton'))
+                    openPage(browser.find_element_by_id('nextButton'))
+                except WebDriverException:
+                    time.sleep(0.05)
+                    continue
+                break
             continue
+        print 'Starting ' + currentItemId
 
         currentItem['url'] = browser.current_url
         currentItem['gender'] = department['gender']
@@ -250,7 +245,54 @@ def getItems(department):
 
         currentItem.update(getDescription())  # Name, description, size
 
-        print currentItem
+        # If we already indexed an item which this item is a duplicate of, then this is the same product in a different color.
+        counter = 0
+        while True:
+            time.sleep(0.1)
+            try:
+                alternateColorDiv = browser.find_element_by_class_name('container').find_element_by_class_name('colors').find_elements_by_tag_name('div')[counter]
+            except IndexError:
+                break
+            except NoSuchElementException:
+                time.sleep(0.05)
+                continue
+            except StaleElementReferenceException:
+                continue
+            try:
+                openPage(alternateColorDiv.find_element_by_tag_name('a'))
+            except WebDriverException:
+                continue
+            except Exception:
+                continue
+
+            images = getImages()
+
+            alternateColorId = ''
+            # Get the id
+            while alternateColorId == '':
+                try:
+                    alternateColorId = browser.find_element_by_class_name('product').find_element_by_class_name('title').find_element_by_tag_name('h1').text
+                except NoSuchElementException as e:
+                    time.sleep(0.1)
+                    continue
+            if alternateColorId in visitedIds:
+                counter += 1
+                continue
+            visitedIds.append(alternateColorId)
+
+            try:
+                colorName = browser.find_element_by_class_name('color').find_element_by_tag_name('span').get_attribute('innerHTML')
+                currentItem['images'] += images
+                currentItem['colors'].append({'name':colorName,
+                                       'color_family':'',
+                                       'images':images})
+                print '  Added ' + alternateColorId + ' to ' + currentItemId
+            except NoSuchElementException as e:
+                pass
+            browser.back()
+            counter += 1
+
+        print 'Finished with ' + currentItemId
         items[currentItemId] = currentItem
         openPage(browser.find_element_by_id('nextButton'))
 
