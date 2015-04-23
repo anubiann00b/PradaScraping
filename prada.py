@@ -5,6 +5,7 @@ import time
 chromedriver = "./chromedriver"
 browser = webdriver.Chrome(executable_path = chromedriver)
 materials = ['silk', 'cotton', 'chiffon', 'satin', 'silt', 'wool', 'linen', 'cashmere', 'taffita', 'leather', 'mink', 'fur', 'suade', 'tweed', 'fleece', 'velvet', 'grogaine', 'corduroy', 'denim']
+c_colors = ['brown', 'orange', 'yellow', 'red', 'purple', 'blue', 'green', 'gray', 'white', 'black', 'pink', 'gold', 'silver', 'beige']
 
 friendlyName = { 'backpack': 'backpack', 'trolley': 'suitcase', 'thong': 'flip flop', 'ballerina': 'flat',
                 'driver': 'moccasin', 'top handle': 'handbag', 'shoulder bag': 'purse' }
@@ -127,6 +128,13 @@ def getImages():
         except StaleElementReferenceException or NoSuchElementException:
             time.sleep(0.05)
 
+def getColorFamilies(color, currentItem):
+    itemColorFamily = ''
+    for colorFamily in c_colors:
+        if colorFamily in currentItem['name'].lower() or colorFamily in color.lower() or colorFamily in currentItem['description'].lower():
+            itemColorFamily = colorFamily
+    return itemColorFamily
+
 # Gets description, name, and size
 def getDescription():
     item = {}
@@ -235,15 +243,21 @@ def getItems(department):
         images = getImages()
         currentItem['images'] = list(images)  # Copy the list so we're not referencing the same element in the color
 
+        currentItem.update(getDescription())  # Name, description, size
+
         currentItem['colors'] = []
         try:
-            currentItem['colors'].append({'name':browser.find_element_by_class_name('color').find_element_by_tag_name('span').get_attribute('innerHTML'),
-                                   'color_family':'',
+            color = browser.find_element_by_class_name('color').find_element_by_tag_name('span').get_attribute('innerHTML')
+            currentItem['colors'].append({'name':color,
+                                   'color_family':getColorFamilies(color, currentItem),
                                    'images':images})
         except NoSuchElementException:
             pass
 
-        currentItem.update(getDescription())  # Name, description, size
+        currentItem['materials'] = []
+        for material in materials:
+            if material in currentItem['description'].lower() or material in currentItem['name'].lower():
+                currentItem['materials'].append(material)
 
         # If we already indexed an item which this item is a duplicate of, then this is the same product in a different color.
         counter = 0
@@ -284,7 +298,7 @@ def getItems(department):
                 colorName = browser.find_element_by_class_name('color').find_element_by_tag_name('span').get_attribute('innerHTML')
                 currentItem['images'] += images
                 currentItem['colors'].append({'name':colorName,
-                                       'color_family':'',
+                                       'color_family':getColorFamilies(colorName, currentItem),
                                        'images':images})
                 print '  Added ' + alternateColorId + ' to ' + currentItemId
             except NoSuchElementException as e:
