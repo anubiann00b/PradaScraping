@@ -16,6 +16,7 @@ def isNumber(s):
     except ValueError:
         return False
 
+# Waits for a function to return true. Used for dynamic loading.
 def waitFor(condition_function):
     start_time = time.time()
     while time.time() < start_time + 20:
@@ -25,9 +26,9 @@ def waitFor(condition_function):
             time.sleep(0.1)
     raise Exception('Timeout waiting for ' + condition_function.__name__)
 
+# Opens a page and waits for it to load
 def openPage(link):
     link.click()
-
     def isStale():
         try:
             # poll the link with an arbitrary call
@@ -35,9 +36,9 @@ def openPage(link):
             return False
         except StaleElementReferenceException:
             return True
-
     waitFor(isStale)
 
+# Gets a list of departments within a collection (men, women)
 def getDepartmentsFromCollection(url, gender, element):
     browser.get(url)
     departmentList = browser.find_element_by_id(element)
@@ -53,6 +54,7 @@ def getDepartmentsFromCollection(url, gender, element):
                                       'gender':gender})
     return collectionDepartments
 
+# Gets a list of departments (footwear, handbags, etc)
 def getDepartments():
     departments = []
     departments.append({'name':'Fashion Show',
@@ -67,11 +69,12 @@ def getDepartments():
 
 departments = getDepartments()
 
-
+# Gets a list of items within a department
 def getItems(department):
     items = {}
     browser.get(department['url'])
 
+    # Open the page of the first item
     while True:  # sometimes the element doesn't load
         try:
             openPage(browser.find_element_by_class_name('nextItem'))  # first item
@@ -82,9 +85,12 @@ def getItems(department):
             time.sleep(0.1)
             continue
         break
+
+    # Get all the items
     while True:
-        item = {}
+        currentItem = {}
         currentItemId = ''
+        # Get the id
         while currentItemId == '':
             try:
                 currentItemId = browser.find_element_by_class_name('product').find_element_by_class_name('title').find_element_by_tag_name('h1').text
@@ -93,14 +99,18 @@ def getItems(department):
                 continue
             if len(items) == 0:
                 firstItemId = currentItemId
+
+        # Check if we're done with the department
         if len(items) != 0 and currentItemId == firstItemId:
             print department['name'] + ' done! ' + str(len(items)) + " items."
             return items
+
+        # If we already indexed an item which this item is a duplicate of, then this is the same product in a different color.
         duplicate = False
         for alternateColorDiv in browser.find_element_by_class_name('container').find_element_by_class_name('colors').find_elements_by_tag_name('div'):
             try:
                 alternateColorId = alternateColorDiv.get_attribute('id')[5:]  # colorBN2899_2E14_F0J4L
-            except StaleElementReferenceException:  # Sometimes a false alternate loads and then disappears
+            except StaleElementReferenceException:  # Sometimes a false alternate loads and then disappears, site bug
                 continue
             if alternateColorId in items:
                 duplicate = True
@@ -120,15 +130,16 @@ def getItems(department):
                     print existingItem
                 except NoSuchElementException:
                     pass
+        # If this was a duplicate item, just go to the next one. We already added the color.
         if duplicate:
             openPage(browser.find_element_by_id('nextButton'))
             continue
 
-        item['url'] = browser.current_url
-        item['gender'] = department['gender']
-        item['currency'] = 'USD'
-        item['brand'] = 'prada'
-        item['store'] = 'prada'
+        currentItem['url'] = browser.current_url
+        currentItem['gender'] = department['gender']
+        currentItem['currency'] = 'USD'
+        currentItem['brand'] = 'prada'
+        currentItem['store'] = 'prada'
 
         availableSizes = []
         unavailableSizes = []
@@ -145,10 +156,10 @@ def getItems(department):
                     unavailableSizes.append(size)
                 else:
                     raise RuntimeError('Error: Unknown Size Availability: ' + availability + '\n' + department['url'])
-            item['sizes'] = availableSizes
-            item['unavailable'] = unavailableSizes
+            currentItem['sizes'] = availableSizes
+            currentItem['unavailable'] = unavailableSizes
 
-        item['category'] = friendlyName.get(browser.find_element_by_class_name('nameProduct').text,
+        currentItem['category'] = friendlyName.get(browser.find_element_by_class_name('nameProduct').text,
                                             browser.find_element_by_class_name('nameProduct').text)
 
         itemPrice = ''
@@ -157,19 +168,19 @@ def getItems(department):
             itemPrice = browser.find_element_by_id('price_target').text
             for char in '$ ,': itemPrice = itemPrice.replace(char, '')
             if itemPrice != '':
-                item['price'] = float(itemPrice)
+                currentItem['price'] = float(itemPrice)
             else:
                 time.sleep(0.05)
 
         buyMessage = browser.find_element_by_class_name('addToCartButton').get_attribute('innerHTML')
         if buyMessage == '_add to shopping bag':
-            item['available'] = True
+            currentItem['available'] = True
         elif buyMessage == '_sold out':
-            item['available'] = True
+            currentItem['available'] = True
         elif buyMessage == '_available soon':
-            item['available'] = False
+            currentItem['available'] = False
         else:
-            item['available'] = 'Unknown'
+            currentItem['available'] = 'Unknown'
             raise RuntimeError('Error: Unknown Availability: ' + buyMessage + '\n' + department['url'])
 
         images = []
@@ -177,11 +188,11 @@ def getItems(department):
             imageUrl = imageHolder.find_element_by_tag_name('img').get_attribute('src')
             images.append(imageUrl)
 
-        item['images'] = list(images)
+        currentItem['images'] = list(images)
 
-        item['colors'] = []
+        currentItem['colors'] = []
         try:
-            item['colors'].append({'name':browser.find_element_by_class_name('color').find_element_by_tag_name('span').get_attribute('innerHTML'),
+            currentItem['colors'].append({'name':browser.find_element_by_class_name('color').find_element_by_tag_name('span').get_attribute('innerHTML'),
                                    'color_family':'',
                                    'images':images})
         except NoSuchElementException:
@@ -214,19 +225,19 @@ def getItems(department):
                 width = ''
             if not isNumber(height):
                 height = ''
-        item['size'] = length + 'x' + width + 'x' + height
+        currentItem['size'] = length + 'x' + width + 'x' + height
 
         descriptionString = description.find_element_by_tag_name('p').get_attribute('innerHTML').replace('<br><br>', '\n')
         try:
             firstItemIndex = descriptionString.index('\n')
-            item['name'] = descriptionString[:firstItemIndex].title()
-            item['description'] = descriptionString[firstItemIndex+1:]
+            currentItem['name'] = descriptionString[:firstItemIndex].title()
+            currentItem['description'] = descriptionString[firstItemIndex+1:]
         except ValueError:
-            item['name'] = descriptionString
-            item['description'] = ''
+            currentItem['name'] = descriptionString
+            currentItem['description'] = ''
 
-        print item
-        items[currentItemId] = item
+        print currentItem
+        items[currentItemId] = currentItem
         openPage(browser.find_element_by_id('nextButton'))
 
 allItems = {}
