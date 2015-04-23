@@ -70,6 +70,97 @@ def getDepartments():
 departments = getDepartments()
 
 # Gets a list of items within a department
+def getShoeSizes():
+    availableSizes = []
+    unavailableSizes = []
+    if department['name'] == 'Footwear':
+        sizeElements = []
+        while len(sizeElements) == 0:
+            sizeElements = browser.find_element_by_class_name('size_list').find_elements_by_tag_name('li')
+        for sizeElement in sizeElements:
+            size = sizeElement.find_element_by_tag_name('div').get_attribute('innerHTML')
+            availability = sizeElement.get_attribute('class')
+            if availability == 'available':
+                availableSizes.append(size)
+            elif availability == 'unavailable':
+                unavailableSizes.append(size)
+            else:
+                raise RuntimeError('Error: Unknown Size Availability: ' + availability + '\n' + department['url'])
+        return {'sizes': availableSizes, 'unavailable': unavailableSizes }
+    return {}
+
+
+def getPrice():
+    while True:  # Price is loaded dynamically -_-
+        # Default formatting: "$ 2,915"
+        itemPrice = browser.find_element_by_id('price_target').text
+        for char in '$ ,': itemPrice = itemPrice.replace(char, '')
+        if itemPrice == '':
+            time.sleep(0.05)
+        else:
+            return float(itemPrice)
+
+
+def getAvailability():
+    buyMessage = browser.find_element_by_class_name('addToCartButton').get_attribute('innerHTML')
+    if buyMessage == '_add to shopping bag':
+        return True
+    elif buyMessage == '_sold out':
+        return False
+    elif buyMessage == '_available soon':
+        return False
+    else:
+        return False
+
+def getImages():
+    images = []
+    for imageHolder in browser.find_element_by_class_name('als-wrapper').find_elements_by_class_name('als-item'):
+        imageUrl = imageHolder.find_element_by_tag_name('img').get_attribute('src')
+        images.append(imageUrl)
+    return images
+
+# Gets description, name, and size
+def getDescription:
+    item = {}
+    description = browser.find_element_by_class_name('description')
+    dimensions = description.get_attribute('innerHTML')
+    length = ''
+    width = ''
+    height = ''
+    if '<br>' in dimensions:
+        dimensions = dimensions[dimensions.index('<br>'):]
+        position = dimensions.find('l. ')
+        try:
+            length = dimensions[position+3:dimensions.index('&nbsp;', position+3)]
+        except: pass
+
+        position = dimensions.find('w. ')
+        try:
+            width = dimensions[position+3:dimensions.index('&nbsp;', position+3)]
+        except: pass
+        position = dimensions.find('h. ')
+        try:
+            height = dimensions[position+3:dimensions.index('&nbsp;', position+3)]
+        except: pass
+
+        if not isNumber(length):
+            length = ''
+        if not isNumber(width):
+            width = ''
+        if not isNumber(height):
+            height = ''
+    item['size'] = length + 'x' + width + 'x' + height
+
+    descriptionString = description.find_element_by_tag_name('p').get_attribute('innerHTML').replace('<br><br>', '\n')
+    try:
+        firstItemIndex = descriptionString.index('\n')
+        item['name'] = descriptionString[:firstItemIndex].title()
+        item['description'] = descriptionString[firstItemIndex+1:]
+    except ValueError:
+        item['name'] = descriptionString
+        item['description'] = ''
+    return item
+
 def getItems(department):
     items = {}
     browser.get(department['url'])
@@ -116,13 +207,10 @@ def getItems(department):
                 duplicate = True
                 existingItem = items[alternateColorId]
 
-                images = []
-                for imageHolder in browser.find_element_by_class_name('als-wrapper').find_elements_by_class_name('als-item'):
-                    imageUrl = imageHolder.find_element_by_tag_name('img').get_attribute('src')
-                    images.append(imageUrl)
+                images = getImages()
                 try:
                     colorName = browser.find_element_by_class_name('color').find_element_by_tag_name('span').get_attribute('innerHTML')
-                    existingItem['images'] += images  # HERE
+                    existingItem['images'] += images
                     existingItem['colors'].append({'name':colorName,
                                            'color_family':'',
                                            'images':images})
@@ -141,54 +229,16 @@ def getItems(department):
         currentItem['brand'] = 'prada'
         currentItem['store'] = 'prada'
 
-        availableSizes = []
-        unavailableSizes = []
-        if department['name'] == 'Footwear':
-            sizeElements = []
-            while len(sizeElements) == 0:
-                sizeElements = browser.find_element_by_class_name('size_list').find_elements_by_tag_name('li')
-            for sizeElement in sizeElements:
-                size = sizeElement.find_element_by_tag_name('div').get_attribute('innerHTML')
-                availability = sizeElement.get_attribute('class')
-                if availability == 'available':
-                    availableSizes.append(size)
-                elif availability == 'unavailable':
-                    unavailableSizes.append(size)
-                else:
-                    raise RuntimeError('Error: Unknown Size Availability: ' + availability + '\n' + department['url'])
-            currentItem['sizes'] = availableSizes
-            currentItem['unavailable'] = unavailableSizes
+        currentItem.update(getShoeSizes())
 
         currentItem['category'] = friendlyName.get(browser.find_element_by_class_name('nameProduct').text,
                                             browser.find_element_by_class_name('nameProduct').text)
 
-        itemPrice = ''
-        while itemPrice == '':  # Price is loaded dynamically -_-
-            # Default formatting: "$ 2,915"
-            itemPrice = browser.find_element_by_id('price_target').text
-            for char in '$ ,': itemPrice = itemPrice.replace(char, '')
-            if itemPrice != '':
-                currentItem['price'] = float(itemPrice)
-            else:
-                time.sleep(0.05)
+        currentItem['price'] = getPrice()
+        currentItem['available'] = getAvailability()
 
-        buyMessage = browser.find_element_by_class_name('addToCartButton').get_attribute('innerHTML')
-        if buyMessage == '_add to shopping bag':
-            currentItem['available'] = True
-        elif buyMessage == '_sold out':
-            currentItem['available'] = True
-        elif buyMessage == '_available soon':
-            currentItem['available'] = False
-        else:
-            currentItem['available'] = 'Unknown'
-            raise RuntimeError('Error: Unknown Availability: ' + buyMessage + '\n' + department['url'])
-
-        images = []
-        for imageHolder in browser.find_element_by_class_name('als-wrapper').find_elements_by_class_name('als-item'):
-            imageUrl = imageHolder.find_element_by_tag_name('img').get_attribute('src')
-            images.append(imageUrl)
-
-        currentItem['images'] = list(images)
+        images = getImages()
+        currentItem['images'] = list(images)  # Copy the list so we're not referencing the same element in the color
 
         currentItem['colors'] = []
         try:
@@ -198,43 +248,7 @@ def getItems(department):
         except NoSuchElementException:
             pass
 
-        description = browser.find_element_by_class_name('description')
-        dimensions = description.get_attribute('innerHTML')
-        length = ''
-        width = ''
-        height = ''
-        if '<br>' in dimensions:
-            dimensions = dimensions[dimensions.index('<br>'):]
-            position = dimensions.find('l. ')
-            try:
-                length = dimensions[position+3:dimensions.index('&nbsp;', position+3)]
-            except: pass
-
-            position = dimensions.find('w. ')
-            try:
-                width = dimensions[position+3:dimensions.index('&nbsp;', position+3)]
-            except: pass
-            position = dimensions.find('h. ')
-            try:
-                height = dimensions[position+3:dimensions.index('&nbsp;', position+3)]
-            except: pass
-
-            if not isNumber(length):
-                length = ''
-            if not isNumber(width):
-                width = ''
-            if not isNumber(height):
-                height = ''
-        currentItem['size'] = length + 'x' + width + 'x' + height
-
-        descriptionString = description.find_element_by_tag_name('p').get_attribute('innerHTML').replace('<br><br>', '\n')
-        try:
-            firstItemIndex = descriptionString.index('\n')
-            currentItem['name'] = descriptionString[:firstItemIndex].title()
-            currentItem['description'] = descriptionString[firstItemIndex+1:]
-        except ValueError:
-            currentItem['name'] = descriptionString
-            currentItem['description'] = ''
+        currentItem.update(getDescription())  # Name, description, size
 
         print currentItem
         items[currentItemId] = currentItem
